@@ -20,8 +20,8 @@ API para consultar informações detalhadas de empresas pelo **CNPJ**, incluindo
 1. Clone o repositório:
 
 ```bash
-git clone https://github.com/Mauriciofnti/api_consulta_cnpj
-cd <NOME_DO_REPOSITORIO>
+git clone https://github.com/Mauriciofnti/api_consulta_cnpj.git
+cd api_consulta_cnpj
 ```
 Instale as dependências:
 
