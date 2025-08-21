@@ -7,115 +7,111 @@ const { neon } = require('@neondatabase/serverless');
 const app = express();
 const port = 3000;
 
-const selectQuery = `SELECT 
-        estab.cnpj_basico || estab.cnpj_ordem || estab.cnpj_dv AS cnpj,
-        estab.nome_fantasia,
-        empr.razao_social,
-        CASE estab.situacao_cadastral
-            WHEN '01' THEN 'NULA'
-            WHEN '02' THEN 'ATIVA'
-            WHEN '03' THEN 'SUSPENSA'
-            WHEN '04' THEN 'INAPTA'
-            WHEN '08' THEN 'BAIXADA'
-            ELSE 'Não informado'
-        END AS situacao,
-        mt.descricao AS motivo,
-        CASE empr.porte_empresa
-            WHEN '00' THEN 'NÃO INFORMADO'
-            WHEN '01' THEN 'MICRO EMPRESA'
-            WHEN '03' THEN 'EMPRESA DE PEQUENO PORTE'
-            ELSE 'DEMAIS'
-        END AS porte_empresa,
-        empr.ente_federativo_responsavel,
-        CONCAT(estab.tipo_logradouro, ' ', estab.logradouro) AS logradouro,
-        estab.numero,
-        estab.complemento,
-        estab.bairro,
-        estab.uf,
-        muni.descricao AS municipio,
-        estab.cep,
-        TRIM(CONCAT(estab.ddd_1, estab.telefone_1)) AS telefone_1,
-        TRIM(CONCAT(estab.ddd_2, estab.telefone_2)) AS telefone_2,
-        TRIM(CONCAT(estab.ddd_fax, estab.fax)) AS fax,
-        estab.correio_eletronico AS email,
-        CASE ds.opcao_pelo_simples
-            WHEN 'S' THEN 'Simples'
-            ELSE 'Não'
-        END AS opcao_pelo_simples,
-        TO_CHAR(ds.data_opcao_simples, 'DD/MM/YYYY') AS data_opcao_simples,
-        TO_CHAR(ds.data_exclusao_simples, 'DD/MM/YYYY') AS data_exclusao_simples,
-        CASE ds.opcao_pelo_mei
-            WHEN 'S' THEN 'Sim'
-            ELSE 'Não'
-        END AS mei,
-        TO_CHAR(ds.data_opcao_mei, 'DD/MM/YYYY') AS data_opcao_mei,
-        TO_CHAR(ds.data_exclusao_mei, 'DD/MM/YYYY') AS data_exclusao_mei,
-        empr.capital_social,
-        nj.descricao AS natureza_juridica,
-        qs.descricao AS qualificacao_responsavel,
-        CONCAT(cp.codigo_cnaes, ' - ', cp.descricao) AS cnae_principal,
-        COALESCE(
-            (
-                SELECT json_agg(
-                    json_build_object(
-                        'cnae_secundario', CONCAT(cs.codigo_cnaes, ' - ', cs.descricao)
-                    )
-                ) 
-                FROM unnest(string_to_array(estab.cnae_fiscal_secundaria, ',')) AS sec(codigo_cnaes)
-                JOIN cnaes cs ON cs.codigo_cnaes = sec.codigo_cnaes
-            ), '[]'::json
-        ) AS cnaes_secundarios,
-        COALESCE(
-            (
-                SELECT json_agg(
-                    json_build_object(
-                        'identificador_socio',
-                        CASE s.identificador_socio
-                            WHEN '1' THEN 'PESSOA JURÍDICA'
-                            WHEN '2' THEN 'PESSOA FÍSICA'
-                            WHEN '3' THEN 'ESTRANGEIRO'
-                            ELSE 'NÃO INFORMADO'
-                        END,
-                        'nome_socio_razao_social', s.nome_socio_razao_social,
-                        'cnpj_cpf_socio', s.cnpj_cpf_socio,
-                        'qualificacao_socio', qs_socio.descricao,
-                        'data_entrada_sociedade', TO_CHAR(s.data_entrada_sociedade, 'DD/MM/YYYY'),
-                        'pais', s.pais,
-                        'cpf_representante_legal', s.cpf_representante_legal,
-                        'nome_representante', s.nome_representante,
-                        'qualificacao_representante_legal', s.qualificacao_representante_legal,
-                        'faixa_etaria',
-                        CASE s.faixa_etaria
-                            WHEN '1' THEN '0 a 12 anos'
-                            WHEN '2' THEN '13 a 20 anos'
-                            WHEN '3' THEN '21 a 30 anos'
-                            WHEN '4' THEN '31 a 40 anos'
-                            WHEN '5' THEN '41 a 50 anos'
-                            WHEN '6' THEN '51 a 60 anos'
-                            WHEN '7' THEN '61 a 70 anos'
-                            WHEN '8' THEN '71 a 80 anos'
-                            WHEN '9' THEN 'maior de 80 anos'
-                            WHEN '0' THEN 'não se aplica'
-                        END
-                    )
+//Query com pré-tratamento de dados
+const selectQuery = `
+SELECT 
+    estab.cnpj_basico || estab.cnpj_ordem || estab.cnpj_dv AS cnpj,
+    estab.nome_fantasia,
+    empr.razao_social,
+    CASE estab.situacao_cadastral
+        WHEN '01' THEN 'NULA'
+        WHEN '02' THEN 'ATIVA'
+        WHEN '03' THEN 'SUSPENSA'
+        WHEN '04' THEN 'INAPTA'
+        WHEN '08' THEN 'BAIXADA'
+        ELSE 'Não informado'
+    END AS situacao,
+    mt.descricao AS motivo,
+    CASE empr.porte_empresa
+        WHEN '00' THEN 'NÃO INFORMADO'
+        WHEN '01' THEN 'MICRO EMPRESA'
+        WHEN '03' THEN 'EMPRESA DE PEQUENO PORTE'
+        ELSE 'DEMAIS'
+    END AS porte_empresa,
+    empr.ente_federativo_responsavel,
+    CONCAT(estab.tipo_logradouro, ' ', estab.logradouro) AS logradouro,
+    estab.numero,
+    estab.complemento,
+    estab.bairro,
+    estab.uf,
+    muni.descricao AS municipio,
+    estab.cep,
+    TRIM(CONCAT(estab.ddd_1, estab.telefone_1)) AS telefone_1,
+    TRIM(CONCAT(estab.ddd_2, estab.telefone_2)) AS telefone_2,
+    TRIM(CONCAT(estab.ddd_fax, estab.fax)) AS fax,
+    estab.correio_eletronico AS email,
+    COALESCE(ds.opcao_pelo_simples, 'N') AS opcao_pelo_simples,
+    COALESCE(TO_CHAR(ds.data_opcao_simples, 'DD/MM/YYYY'), 'N/A') AS data_opcao_simples,
+    COALESCE(TO_CHAR(ds.data_exclusao_simples, 'DD/MM/YYYY'), 'N/A') AS data_exclusao_simples,
+    COALESCE(ds.opcao_pelo_mei, 'N') AS opcao_pelo_mei,
+    COALESCE(TO_CHAR(ds.data_opcao_mei, 'DD/MM/YYYY'), 'N/A') AS data_opcao_mei,
+    COALESCE(TO_CHAR(ds.data_exclusao_mei, 'DD/MM/YYYY'), 'N/A') AS data_exclusao_mei,
+    empr.capital_social,
+    nj.descricao AS natureza_juridica,
+    qs.descricao AS qualificacao_responsavel,
+    CONCAT(cp.codigo_cnaes, ' - ', cp.descricao) AS cnae_principal,
+    COALESCE(
+        (
+            SELECT json_agg(
+                json_build_object(
+                    'cnae_secundario', CONCAT(cs.codigo_cnaes, ' - ', cs.descricao)
                 )
-                FROM socios s
-                LEFT JOIN qualificacoes_socios qs_socio
-                    ON qs_socio.codigo_qualificacoes_socios = s.qualificacao_socio
-                WHERE s.cnpj_basico = estab.cnpj_basico
-            ), '[]'::json
-        ) AS socios
-      FROM estabelecimentos estab
-      JOIN empresas empr ON empr.cnpj_basico = estab.cnpj_basico
-      JOIN dados_simples ds ON ds.cnpj_basico = estab.cnpj_basico
-      JOIN municipios muni ON muni.codigo_municipios = estab.municipio
-      JOIN naturezas_juridicas nj ON nj.codigo_naturezas_juridicas = empr.natureza_juridica 
-      JOIN qualificacoes_socios qs ON qs.codigo_qualificacoes_socios = empr.qualificacao_responsavel
-      JOIN motivos mt ON mt.codigo_motivos = estab.motivo_situacao_cadastral
-      JOIN cnaes cp ON cp.codigo_cnaes = estab.cnae_fiscal_principal
-      WHERE estab.cnpj_basico = $1
-        AND estab.cnpj_ordem = $2
-        AND estab.cnpj_dv = $3;
+            ) 
+            FROM unnest(string_to_array(estab.cnae_fiscal_secundaria, ',')) AS sec(codigo_cnaes)
+            JOIN cnaes cs ON cs.codigo_cnaes = sec.codigo_cnaes
+        ), '[]'::json
+    ) AS cnaes_secundarios,
+    COALESCE(
+        (
+            SELECT json_agg(
+                json_build_object(
+                    'identificador_socio',
+                    CASE s.identificador_socio
+                        WHEN '1' THEN 'PESSOA JURÍDICA'
+                        WHEN '2' THEN 'PESSOA FÍSICA'
+                        WHEN '3' THEN 'ESTRANGEIRO'
+                        ELSE 'NÃO INFORMADO'
+                    END,
+                    'nome_socio_razao_social', s.nome_socio_razao_social,
+                    'cnpj_cpf_socio', s.cnpj_cpf_socio,
+                    'qualificacao_socio', qs_socio.descricao,
+                    'data_entrada_sociedade', TO_CHAR(s.data_entrada_sociedade, 'DD/MM/YYYY'),
+                    'pais', s.pais,
+                    'cpf_representante_legal', s.cpf_representante_legal,
+                    'nome_representante', s.nome_representante,
+                    'qualificacao_representante_legal', s.qualificacao_representante_legal,
+                    'faixa_etaria',
+                    CASE s.faixa_etaria
+                        WHEN '1' THEN '0 a 12 anos'
+                        WHEN '2' THEN '13 a 20 anos'
+                        WHEN '3' THEN '21 a 30 anos'
+                        WHEN '4' THEN '31 a 40 anos'
+                        WHEN '5' THEN '41 a 50 anos'
+                        WHEN '6' THEN '51 a 60 anos'
+                        WHEN '7' THEN '61 a 70 anos'
+                        WHEN '8' THEN '71 a 80 anos'
+                        WHEN '9' THEN 'maior de 80 anos'
+                        WHEN '0' THEN 'não se aplica'
+                    END
+                )
+            )
+            FROM socios s
+            LEFT JOIN qualificacoes_socios qs_socio
+                ON qs_socio.codigo_qualificacoes_socios = s.qualificacao_socio
+            WHERE s.cnpj_basico = estab.cnpj_basico
+        ), '[]'::json
+    ) AS socios
+FROM estabelecimentos estab
+JOIN empresas empr ON empr.cnpj_basico = estab.cnpj_basico
+LEFT JOIN dados_simples ds ON ds.cnpj_basico = estab.cnpj_basico
+JOIN municipios muni ON muni.codigo_municipios = estab.municipio
+JOIN naturezas_juridicas nj ON nj.codigo_naturezas_juridicas = empr.natureza_juridica 
+JOIN qualificacoes_socios qs ON qs.codigo_qualificacoes_socios = empr.qualificacao_responsavel
+JOIN motivos mt ON mt.codigo_motivos = estab.motivo_situacao_cadastral
+JOIN cnaes cp ON cp.codigo_cnaes = estab.cnae_fiscal_principal
+WHERE TRIM(estab.cnpj_basico) = $1
+  AND TRIM(estab.cnpj_ordem) = $2
+  AND TRIM(estab.cnpj_dv) = $3;
         `
 
 app.use(cors());
@@ -136,6 +132,24 @@ function parseCNPJ(cnpj) {
     cnpj_dv: cleanedCNPJ.slice(12, 14),
   };
 }
+//Rota padrão
+app.get('/consulta', async (req, res) => {
+  try {
+    const query = 'SELECT * FROM empresas;';
+    
+    const result = await sql.query(query);
+
+    if (result.length > 0) {
+      res.json(result);
+    } else {
+      res.status(404).json({ message: 'CNPJ não encontrado' });
+    }
+  } catch (err) {
+    console.error('Erro na consulta:', err.message);
+    res.status(500).json({ error: 'Erro ao consultar o CNPJ: ' + err.message });
+  }
+});
+
 
 // Rota para consultar por CNPJ
 app.get('/consulta/:cnpj', async (req, res) => {
@@ -182,7 +196,6 @@ app.get('/gerar-pdf/:cnpj', async (req, res) => {
     doc.fontSize(20).text('Informações da Empresa', { align: 'center' });
     doc.moveDown();
     doc.fontSize(14).text(`Nome Fantasia: ${companyData.nome_fantasia || 'N/A'}`);
-    // ... restante do conteúdo do PDF
     doc.moveDown();
     doc.fontSize(14).text(`Nome Fantasia: ${companyData.nome_fantasia || 'N/A'}`);
     doc.text(`Razão Social: ${companyData.razao_social || 'N/A'}`);
